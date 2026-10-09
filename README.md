@@ -8,18 +8,29 @@ go get github.com/activedns/activedns-go
 ```
 
 ```go
-// name your program: it is sent in the User-Agent of every request
-client, err := activedns.NewClient("mytool/1.0")
-if err != nil {
-	log.Fatal(err)
-}
+package main
 
-page, err := client.Query(ctx, "*.example.com")
-if err != nil {
-	log.Fatal(err)
-}
-for _, record := range page.Records {
-	fmt.Println(record.Domain, record.IPAddress, record.Observed)
+import (
+	"context"
+	"fmt"
+	"log"
+
+	"github.com/activedns/activedns-go"
+)
+
+func main() {
+	client, err := activedns.NewClient("mytool/1.0")
+	if err != nil {
+		log.Fatal(err)
+	}
+	ctx := context.Background()
+	page, err := client.Query(ctx, "*.example.com")
+	if err != nil {
+		log.Fatal(err)
+	}
+	for _, record := range page.Records {
+		fmt.Println(record.Domain, record.IPAddress, record.Observed)
+	}
 }
 ```
 
