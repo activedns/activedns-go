@@ -1,0 +1,75 @@
+# Publishes a version, and only what has passed every check.
+#
+#   a tag v<version>  -> a GitHub release, and the Go module proxy
+#
+# A Go module is published by its tag: there is nothing to build or upload.
+# This workflow checks the tag, writes the release notes and makes sure the
+# version can be fetched with "go get".
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+
+jobs:
+  # The tag is checked first: the module proxy keeps a version for good once
+  # anyone has asked for it, so a wrong tag is to be caught before the rest.
+  version:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - name: The tag is the version of the SDK
+        run: |
+          version=$(sed -n 's/^const Version = "\(.*\)"$/\1/p' version.go)
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "tag $GITHUB_REF_NAME, but version.go says $version"
+            exit 1
+          fi
+
+  checks:
+    needs: [version]
+    uses: ./.github/workflows/ci.yml
+
+  release:
+    needs: [checks]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write # to create the release
+    steps:
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes
+
+  # The released version as a user gets it: fetched through the module proxy
+  # and used for one request to the live API. Fetching it is also what makes
+  # the proxy and pkg.go.dev know the version.
+  install:
+    needs: [release]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+          cache: false
+      - name: Run the released query example
+        run: |
+          # the proxy may need a moment to see a new tag
+          for attempt in 1 2 3 4 5 6; do
+            if go run "github.com/activedns/activedns-go/example/query@$GITHUB_REF_NAME" -limit 5 example.com; then
+              exit 0
+            fi
+            echo "attempt $attempt failed"
+            sleep 20
+          done
+          exit 1

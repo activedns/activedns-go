@@ -1,0 +1,7 @@
+# editors
+.idea/
+.vscode/
+
+# go test -c, go build
+*.test
+*.out

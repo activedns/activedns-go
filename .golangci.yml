@@ -1,0 +1,10 @@
+version: "2"
+linters:
+  exclusions:
+    presets:
+      # an unchecked Close or print is not a mistake
+      - std-error-handling
+    rules:
+      # the tests' fake servers and deliberately ignored results
+      - path: _test\.go
+        linters: [errcheck]

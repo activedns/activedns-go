@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  # release.yml runs these checks before it publishes
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+          cache: false # the module has no dependencies
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "not formatted with gofmt:"
+            echo "$unformatted"
+            exit 1
+          fi
+      - uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.14.0
+          args: --build-tags e2e
+
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        # the oldest release go.mod allows, and the current one
+        go: ["1.23", stable]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: ${{ matrix.go }}
+          cache: false
+      - run: go vet ./...
+      - run: go test -race -count=1 ./...
+      - name: Build the examples
+        run: go build ./example/...
+
+  # The client against the live API, with the token built into the SDK.
+  e2e:
+    needs: [lint, test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # one run at a time: the built-in token's rate limit is counted per address
+    concurrency:
+      group: e2e
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+          cache: false
+      - run: go test -tags e2e -run E2E -count=1 -v .
