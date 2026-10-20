@@ -188,3 +188,58 @@ func TestE2EUnknownToken(t *testing.T) {
 		t.Errorf("want a 401, got %v", err)
 	}
 }
+
+func TestE2EZone(t *testing.T) {
+	client, ctx := e2eClient(t)
+
+	info, err := client.Zone(ctx, "www.example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Query != "www.example.com" || info.Zone == nil || info.Zone.Name != "example.com" {
+		t.Fatalf("zone: %+v", info)
+	}
+	if len(info.Zone.NSSets) == 0 || len(info.Zone.Nameservers) == 0 {
+		t.Errorf("no NS sets or nameservers: %+v", info.Zone)
+	}
+}
+
+func TestE2EZonesAndNameservers(t *testing.T) {
+	client, ctx := e2eClient(t)
+
+	info, err := client.Zone(ctx, "example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Zone == nil || len(info.Zone.Nameservers) == 0 {
+		t.Fatalf("zone: %+v", info)
+	}
+	ns := info.Zone.Nameservers[0]
+
+	page, err := client.Zones(ctx, activedns.ByNameserver, ns.Name, activedns.WithPageSize(2))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Zones) == 0 || len(page.Zones) > 2 || page.By != activedns.ByNameserver {
+		t.Fatalf("page: %+v", page)
+	}
+	if page.HasMore {
+		next, err := client.NextZones(ctx, page)
+		if err != nil && !activedns.IsForbidden(err) { // past the depth of the token
+			t.Fatal(err)
+		}
+		if err == nil && len(next.Zones) == 0 {
+			t.Errorf("empty next page: %+v", next)
+		}
+	}
+
+	if len(ns.Addresses) > 0 {
+		addr, err := client.Nameservers(ctx, ns.Addresses[0].IP)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if addr.IP == "" || len(addr.Nameservers) == 0 {
+			t.Errorf("address: %+v", addr)
+		}
+	}
+}

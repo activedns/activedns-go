@@ -26,6 +26,20 @@
 // [Client.Query] runs a query and [Client.QueryCombined] matches a domain, a
 // network and an AS number at once.
 //
+// # Zones
+//
+// [Client.Zone] returns the zone of a name: its nameservers, NS sets, SOA and
+// DNSSEC keys, each with the number of zones that share it. [Client.Zones]
+// lists those zones, a page at a time like a query ([Client.NextZones]
+// continues it), and [Client.Nameservers] returns the nameservers at an
+// address.
+//
+//	info, err := client.Zone(ctx, "www.example.com")
+//	if err == nil && info.Zone != nil {
+//		pages, err := client.Zones(ctx, activedns.ByNameserver, info.Zone.Nameservers[0].Name)
+//		...
+//	}
+//
 // # Paging
 //
 // A query returns one [Page]: up to 100 records, or as many as [WithPageSize]
@@ -67,7 +81,8 @@
 //     it out.
 //   - [*APIError]: any other error status. [IsUnauthorized] and [IsForbidden]
 //     classify it.
-//   - [ErrNoMore]: returned by [Client.Next] for the last page of a result.
+//   - [ErrNoMore]: returned by [Client.Next] and [Client.NextZones] for the last
+//     page of a result.
 //
 // # Retries and rate limits
 //

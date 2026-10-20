@@ -57,3 +57,37 @@ func ExampleClient_Next() {
 		log.Fatal(err)
 	}
 }
+
+// Zone returns what is known of the zone of a name. Zones lists the zones
+// that share one of its values, a page at a time.
+func ExampleClient_Zones() {
+	client, err := activedns.NewClient("mytool/1.0")
+	if err != nil {
+		log.Fatal(err)
+	}
+	ctx := context.Background()
+
+	info, err := client.Zone(ctx, "www.example.com")
+	if err != nil {
+		log.Fatal(err)
+	}
+	if info.Zone == nil || len(info.Zone.Nameservers) == 0 {
+		return
+	}
+	ns := info.Zone.Nameservers[0]
+	fmt.Println(ns.Name, "is in", ns.Zones.N, "zones")
+
+	page, err := client.Zones(ctx, activedns.ByNameserver, ns.Name, activedns.WithPageSize(20))
+	for err == nil {
+		for _, zone := range page.Zones {
+			fmt.Println(zone.Name, zone.LastSeen.Format(time.DateOnly))
+		}
+		if !page.HasMore {
+			break
+		}
+		page, err = client.NextZones(ctx, page)
+	}
+	if err != nil {
+		log.Fatal(err)
+	}
+}
