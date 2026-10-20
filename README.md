@@ -42,7 +42,31 @@ AS number (`AS13335`). `QueryCombined` matches several at once.
 It works without an account or a key. AS-number and combined searches, wider networks, complete answers and
 higher rates come with [a token of your own](#custom-token).
 
-The client talks to `/api/v2/query`. The API has no costs or budgets, only rate limits.
+The client talks to `/api/v2/query`, and for zones to `/api/v2/zone`, `/api/v2/zones` and `/api/v2/nameservers`. The API has no costs or budgets, only rate limits.
+
+## Zones
+
+The API also knows the DNS zones behind the names. Three calls follow them:
+
+```go
+info, err := client.Zone(ctx, "www.example.com")   // the zone of a name: NS sets, nameservers, SOA, DS, DNSKEY
+if err != nil {
+	return err
+}
+if info.Zone == nil { // no zone is known for the name
+	return nil
+}
+ns := info.Zone.Nameservers[0]
+fmt.Println(ns.Name, "is used by", ns.Zones.N, "zones") // a few is a lead, thousands is a provider
+
+page, err := client.Zones(ctx, activedns.ByNameserver, ns.Name) // the zones that share it
+addr, err := client.Nameservers(ctx, "192.0.2.1")              // the nameservers at an address
+```
+
+Beside each value of a zone is `Count`: how many zones share it, counted up to 1000 (`Capped`). `Zones` lists
+them by `ByNameserver`, `ByNSSet` (names joined by commas), `BySOAContactOf` (a zone), `BySOAPrimary`,
+`ByDNSKey` (the fingerprint), `ByChildren` (a zone) or `ByRefusedBy` (an address), the most recently seen first.
+It pages like a query, with `WithPageSize`, `WithCursor` and `NextZones`; see [Paging](#paging).
 
 ## Paging
 
@@ -70,7 +94,7 @@ for fetched := 0; err == nil; {
 }
 ```
 
-`Next` repeats the query from where the page ended. On the last page it returns `ErrNoMore`. Past the depth
+`Next` repeats the query from where the page ended. `NextZones` does the same for the `ZonePage` of `Zones`. On the last page it returns `ErrNoMore`. Past the depth
 your token may page to, it fails with a 403 (`IsForbidden`).
 
 ## Limits in SDK default access
@@ -150,7 +174,7 @@ code and hand it to the job as a secret:
 `NewClient` takes the name and version of your program. 
 
 ```
-User-Agent: mytool/1.0 activedns-go/0.2.0 (go1.25.4; linux/amd64)
+User-Agent: mytool/1.0 activedns-go/0.3.0 (go1.25.4; linux/amd64)
 ```
 
 Everyone using the SDK's token looks the same to the API otherwise. With a name, a tool that misbehaves can be
@@ -165,6 +189,7 @@ go run ./example/query example.com                 one page of a search, and the
 go run ./example/query -limit 10 192.0.2.0/24
 go run ./example/subdomains -pages 5 example.com   names under a domain, paging with Next
 go run ./example/combined -domain '*.example.com' -asn 64496
+go run ./example/zone www.example.com             the zone of a name, and the zones that share its nameservers
 ```
 
 They use the SDK's own token; set `ACTIVEDNS_TOKEN` to use yours. `combined` needs one, and shows the refusal
